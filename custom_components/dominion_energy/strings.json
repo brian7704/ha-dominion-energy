@@ -1,0 +1,110 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This account is already configured",
+      "reauth_successful": "Re-authentication successful"
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to Dominion Energy API",
+      "invalid_auth": "Invalid tokens - please get fresh tokens using the dompower auth-helper",
+      "unknown": "An unexpected error occurred",
+      "no_meters_found": "No active AMI meters found for this account"
+    },
+    "step": {
+      "user": {
+        "title": "Connect to Dominion Energy",
+        "description": "Enter your Dominion Energy API tokens.\n\nTo get these tokens, run:\n```\ndompower auth-helper\n```\n\nOr log in at [{login_url}]({login_url}) and extract tokens from browser DevTools.",
+        "data": {
+          "access_token": "Access Token",
+          "refresh_token": "Refresh Token"
+        },
+        "data_description": {
+          "access_token": "JWT access token from API",
+          "refresh_token": "Refresh token from API"
+        }
+      },
+      "select_meter": {
+        "title": "Select Meter",
+        "description": "Multiple accounts or meters were found. Select the one to monitor.",
+        "data": {
+          "meter_selection": "Account and Meter"
+        },
+        "data_description": {
+          "meter_selection": "Select the service location and meter to monitor"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate {name}",
+        "description": "Your authentication has expired. Run `dompower auth-helper` or log in at [{login_url}]({login_url}) to get fresh tokens.",
+        "data": {
+          "access_token": "Access Token",
+          "refresh_token": "Refresh Token"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Cost Calculation Settings",
+        "description": "Configure how energy costs are calculated.",
+        "data": {
+          "cost_mode": "Cost calculation method",
+          "fixed_rate": "Fixed rate ($/kWh)",
+          "peak_rate": "Peak rate ($/kWh)",
+          "off_peak_rate": "Off-peak rate ($/kWh)",
+          "peak_start_hour": "Peak start hour (0-23)",
+          "peak_end_hour": "Peak end hour (0-23)"
+        },
+        "data_description": {
+          "cost_mode": "How to calculate energy costs",
+          "fixed_rate": "Single rate for all usage (used with Fixed Rate mode)",
+          "peak_rate": "Rate during peak hours (used with Time-of-Use mode)",
+          "off_peak_rate": "Rate during off-peak hours (used with Time-of-Use mode)",
+          "peak_start_hour": "Hour when peak pricing starts (0-23)",
+          "peak_end_hour": "Hour when peak pricing ends (0-23)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "latest_interval_usage": {
+        "name": "Latest Interval Usage"
+      },
+      "daily_usage": {
+        "name": "Daily Usage"
+      },
+      "monthly_usage": {
+        "name": "Monthly Usage"
+      },
+      "daily_cost": {
+        "name": "Daily Cost"
+      },
+      "monthly_cost": {
+        "name": "Monthly Cost"
+      },
+      "last_bill_charges": {
+        "name": "Last Bill Charges"
+      },
+      "last_bill_usage": {
+        "name": "Last Bill Usage"
+      },
+      "current_period_usage": {
+        "name": "Current Period Usage"
+      },
+      "effective_rate": {
+        "name": "Effective Rate"
+      },
+      "billing_period_start": {
+        "name": "Billing Period Start"
+      },
+      "billing_period_end": {
+        "name": "Billing Period End"
+      },
+      "is_time_of_use": {
+        "name": "Time-of-Use Plan"
+      }
+    }
+  }
+}

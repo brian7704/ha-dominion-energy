@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - "v*.*.*"
+      - "*.*.*"
+
+permissions: {}
+
+jobs:
+  release:
+    name: Create Release Assets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${VERSION#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update manifest version
+        run: |
+          cd custom_components/dominion_energy
+          jq --arg version "${{ steps.version.outputs.version }}" '.version = $version' manifest.json > manifest.json.tmp
+          mv manifest.json.tmp manifest.json
+
+      - name: Create ZIP archive
+        run: |
+          cd custom_components
+          zip -r dominion_energy.zip dominion_energy
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: custom_components/dominion_energy.zip
