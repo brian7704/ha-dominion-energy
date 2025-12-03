@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -51,7 +52,7 @@ SENSORS: tuple[DominionEnergySensorDescription, ...] = (
     DominionEnergySensorDescription(
         key="daily_usage",
         translation_key="daily_usage",
-        name="Today's usage",
+        name="Yesterday's usage",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -71,7 +72,7 @@ SENSORS: tuple[DominionEnergySensorDescription, ...] = (
     DominionEnergySensorDescription(
         key="daily_cost",
         translation_key="daily_cost",
-        name="Today's cost",
+        name="Yesterday's cost",
         native_unit_of_measurement="USD",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -228,3 +229,31 @@ class DominionEnergySensor(CoordinatorEntity[DominionEnergyCoordinator], SensorE
         if self.coordinator.data is None:
             return None
         return self.entity_description.value_fn(self.coordinator.data)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return extra state attributes including data_date.
+
+        Adds data_date attribute to daily/interval sensors to indicate which
+        day the data represents (since data is delayed by ~1 day).
+        """
+        if self.coordinator.data is None:
+            return None
+
+        attrs: dict[str, Any] = {}
+        key = self.entity_description.key
+
+        # Add data_date for daily and interval sensors
+        if key in ("daily_usage", "daily_cost", "latest_interval_usage"):
+            if self.coordinator.data.data_date:
+                attrs["data_date"] = self.coordinator.data.data_date.isoformat()
+
+        # Add date range for monthly sensors
+        if key in ("monthly_usage", "monthly_cost"):
+            data = self.coordinator.data
+            if data.month_start_date:
+                attrs["month_start"] = data.month_start_date.isoformat()
+            if data.month_end_date:
+                attrs["month_end"] = data.month_end_date.isoformat()
+
+        return attrs if attrs else None

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import logging
 
 from dompower import (
@@ -16,7 +16,18 @@ from dompower import (
     ApiError,
 )
 
+from homeassistant.components.recorder import get_instance
+from homeassistant.components.recorder.models import (
+    StatisticData,
+    StatisticMeanType,
+    StatisticMetaData,
+)
+from homeassistant.components.recorder.statistics import (
+    async_add_external_statistics,
+    get_last_statistics,
+)
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import UnitOfEnergy
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -24,8 +35,10 @@ from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
 )
+from homeassistant.util import dt as dt_util
 
 from .const import (
+    BACKFILL_DAYS,
     CONF_ACCESS_TOKEN,
     CONF_ACCOUNT_NUMBER,
     CONF_COST_MODE,
@@ -64,6 +77,10 @@ class DominionEnergyData:
     daily_cost: float
     monthly_cost: float
     bill_forecast: BillForecast | None
+    # Date tracking for delayed data
+    data_date: date | None  # Which day the daily data represents (yesterday)
+    month_start_date: date | None  # Start of the month range
+    month_end_date: date | None  # End of month range (last complete day)
 
     @property
     def latest_usage(self) -> float | None:
@@ -112,7 +129,11 @@ class DominionEnergyCoordinator(DataUpdateCoordinator[DominionEnergyData]):
         )
 
     async def _async_update_data(self) -> DominionEnergyData:
-        """Fetch data from the API."""
+        """Fetch data from the API.
+
+        Note: The Dominion Energy API only provides data for completed days,
+        so we always fetch yesterday's data (the most recent complete day).
+        """
         if self._client is None:
             await self._async_setup()
 
@@ -122,30 +143,39 @@ class DominionEnergyCoordinator(DataUpdateCoordinator[DominionEnergyData]):
         meter_number = self.config_entry.data[CONF_METER_NUMBER]
 
         today = date.today()
-        start_of_month = today.replace(day=1)
+        yesterday = today - timedelta(days=1)
+
+        # Handle month boundary: determine which month's data we're working with
+        if yesterday.month != today.month:
+            # Yesterday was last day of previous month
+            month_start = yesterday.replace(day=1)
+        else:
+            # Normal case: yesterday is in current month
+            month_start = today.replace(day=1)
 
         try:
-            # Fetch interval data for today (30-min intervals)
+            # Fetch interval data for yesterday (last complete day)
             intervals = await self._client.async_get_interval_usage(
                 account_number=account_number,
                 meter_number=meter_number,
-                start_date=today,
-                end_date=today,
+                start_date=yesterday,
+                end_date=yesterday,
             )
 
             # Calculate daily total from intervals
             daily_total = sum(i.consumption for i in intervals)
 
-            # For monthly, fetch from start of month
-            if today.day > 1:
+            # For monthly, fetch from start of month to yesterday
+            if month_start < yesterday:
                 monthly_intervals = await self._client.async_get_interval_usage(
                     account_number=account_number,
                     meter_number=meter_number,
-                    start_date=start_of_month,
-                    end_date=today,
+                    start_date=month_start,
+                    end_date=yesterday,
                 )
                 monthly_total = sum(i.consumption for i in monthly_intervals)
             else:
+                # First day of month or same day
                 monthly_intervals = intervals
                 monthly_total = daily_total
 
@@ -164,6 +194,9 @@ class DominionEnergyCoordinator(DataUpdateCoordinator[DominionEnergyData]):
 
             latest = intervals[-1] if intervals else None
 
+            # Insert/update external statistics for Energy Dashboard
+            await self._insert_statistics(account_number, meter_number, yesterday)
+
             return DominionEnergyData(
                 intervals=intervals,
                 latest_interval=latest,
@@ -172,6 +205,9 @@ class DominionEnergyCoordinator(DataUpdateCoordinator[DominionEnergyData]):
                 daily_cost=daily_cost,
                 monthly_cost=monthly_cost,
                 bill_forecast=bill_forecast,
+                data_date=yesterday,
+                month_start_date=month_start,
+                month_end_date=yesterday,
             )
 
         except (TokenExpiredError, InvalidAuthError) as err:
@@ -226,3 +262,193 @@ class DominionEnergyCoordinator(DataUpdateCoordinator[DominionEnergyData]):
             # Fixed rate
             fixed_rate = options.get(CONF_FIXED_RATE, DEFAULT_FIXED_RATE)
             return round(total_kwh * fixed_rate, 2)
+
+    async def _insert_statistics(
+        self,
+        account_number: str,
+        meter_number: str,
+        data_date: date,
+    ) -> None:
+        """Insert or update external statistics for Energy Dashboard integration.
+
+        Statistics are stored with hourly granularity, aggregated from 30-minute
+        interval data. On first setup, backfills BACKFILL_DAYS days of history.
+        """
+        stat_id = f"{DOMAIN}:{account_number}_energy_consumption"
+
+        # Check if we have existing statistics
+        last_stat = await get_instance(self.hass).async_add_executor_job(
+            get_last_statistics, self.hass, 1, stat_id, True, {"sum"}
+        )
+
+        if not last_stat.get(stat_id):
+            # First time - backfill historical data
+            _LOGGER.info(
+                "First statistics update for %s - backfilling %d days of data",
+                account_number,
+                BACKFILL_DAYS,
+            )
+            await self._backfill_statistics(account_number, meter_number, stat_id)
+        else:
+            # Incremental update
+            await self._update_statistics(
+                account_number, meter_number, stat_id, last_stat, data_date
+            )
+
+    async def _backfill_statistics(
+        self,
+        account_number: str,
+        meter_number: str,
+        stat_id: str,
+    ) -> None:
+        """Backfill historical statistics for initial setup."""
+        assert self._client is not None
+
+        today = date.today()
+        end_date = today - timedelta(days=1)  # Yesterday
+        start_date = today - timedelta(days=BACKFILL_DAYS)
+
+        _LOGGER.debug("Backfilling statistics from %s to %s", start_date, end_date)
+
+        try:
+            intervals = await self._client.async_get_interval_usage(
+                account_number=account_number,
+                meter_number=meter_number,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        except ApiError as err:
+            _LOGGER.warning("Could not fetch backfill data: %s", err)
+            return
+
+        if not intervals:
+            _LOGGER.warning("No interval data available for backfill")
+            return
+
+        # Group intervals by hour for hourly statistics
+        hourly_data: dict[datetime, float] = {}
+        for interval in intervals:
+            # Normalize to hour start
+            hour_start = interval.timestamp.replace(minute=0, second=0, microsecond=0)
+            if hour_start not in hourly_data:
+                hourly_data[hour_start] = 0.0
+            hourly_data[hour_start] += interval.consumption
+
+        # Build statistics with cumulative sum
+        consumption_statistics: list[StatisticData] = []
+        consumption_sum = 0.0
+
+        for hour_start in sorted(hourly_data.keys()):
+            consumption = hourly_data[hour_start]
+            consumption_sum += consumption
+            # Ensure timezone-aware datetime
+            aware_dt = dt_util.as_utc(hour_start)
+            consumption_statistics.append(
+                StatisticData(start=aware_dt, state=consumption, sum=consumption_sum)
+            )
+
+        if not consumption_statistics:
+            _LOGGER.warning("No statistics to insert after processing intervals")
+            return
+
+        # Create metadata for the statistic
+        metadata = StatisticMetaData(
+            mean_type=StatisticMeanType.NONE,
+            has_sum=True,
+            name=f"Dominion Energy {account_number} consumption",
+            source=DOMAIN,
+            statistic_id=stat_id,
+            unit_class=None,  # Energy class is deprecated, use None
+            unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        )
+
+        _LOGGER.debug(
+            "Adding %d hourly statistics for %s", len(consumption_statistics), stat_id
+        )
+        async_add_external_statistics(self.hass, metadata, consumption_statistics)
+
+    async def _update_statistics(
+        self,
+        account_number: str,
+        meter_number: str,
+        stat_id: str,
+        last_stat: dict,
+        data_date: date,
+    ) -> None:
+        """Update statistics with new data since last recorded statistic."""
+        assert self._client is not None
+
+        # Get the last recorded statistic time and sum
+        last_stat_data = last_stat[stat_id][0]
+        last_stat_start = last_stat_data["start"]
+        current_sum = float(last_stat_data.get("sum", 0))
+
+        # Convert to date for comparison
+        if isinstance(last_stat_start, (int, float)):
+            last_stat_dt = datetime.fromtimestamp(last_stat_start, tz=dt_util.UTC)
+        else:
+            last_stat_dt = last_stat_start
+
+        last_stat_date = last_stat_dt.date()
+
+        # Check if we need to fetch new data
+        if last_stat_date >= data_date:
+            _LOGGER.debug("Statistics already up to date for %s", data_date)
+            return
+
+        # Fetch data from day after last stat to data_date
+        start_date = last_stat_date + timedelta(days=1)
+        _LOGGER.debug("Updating statistics from %s to %s", start_date, data_date)
+
+        try:
+            intervals = await self._client.async_get_interval_usage(
+                account_number=account_number,
+                meter_number=meter_number,
+                start_date=start_date,
+                end_date=data_date,
+            )
+        except ApiError as err:
+            _LOGGER.warning("Could not fetch statistics update data: %s", err)
+            return
+
+        if not intervals:
+            _LOGGER.debug("No new interval data for statistics update")
+            return
+
+        # Group intervals by hour
+        hourly_data: dict[datetime, float] = {}
+        for interval in intervals:
+            hour_start = interval.timestamp.replace(minute=0, second=0, microsecond=0)
+            if hour_start not in hourly_data:
+                hourly_data[hour_start] = 0.0
+            hourly_data[hour_start] += interval.consumption
+
+        # Build new statistics
+        consumption_statistics: list[StatisticData] = []
+
+        for hour_start in sorted(hourly_data.keys()):
+            consumption = hourly_data[hour_start]
+            current_sum += consumption
+            aware_dt = dt_util.as_utc(hour_start)
+            consumption_statistics.append(
+                StatisticData(start=aware_dt, state=consumption, sum=current_sum)
+            )
+
+        if not consumption_statistics:
+            return
+
+        # Create metadata
+        metadata = StatisticMetaData(
+            mean_type=StatisticMeanType.NONE,
+            has_sum=True,
+            name=f"Dominion Energy {account_number} consumption",
+            source=DOMAIN,
+            statistic_id=stat_id,
+            unit_class=None,
+            unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        )
+
+        _LOGGER.debug(
+            "Adding %d new statistics for %s", len(consumption_statistics), stat_id
+        )
+        async_add_external_statistics(self.hass, metadata, consumption_statistics)
