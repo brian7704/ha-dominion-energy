@@ -114,6 +114,8 @@ class DominionEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
 
                 # Initialize session and submit credentials
                 await self._authenticator.async_init_session()
+                assert self._username is not None
+                assert self._password is not None
                 result = await self._authenticator.async_submit_credentials(
                     self._username, self._password
                 )
@@ -436,6 +438,8 @@ class DominionEnergyConfigFlow(ConfigFlow, domain=DOMAIN):
                 self._authenticator = GigyaAuthenticator(session)
 
                 await self._authenticator.async_init_session()
+                assert self._username is not None
+                assert self._password is not None
                 result = await self._authenticator.async_submit_credentials(
                     self._username, self._password
                 )

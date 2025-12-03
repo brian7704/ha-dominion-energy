@@ -32,50 +32,18 @@ A Home Assistant custom integration for monitoring your Dominion Energy electric
 
 ## Setup
 
-### Step 1: Get API Tokens
-
-Due to CAPTCHA protection, initial authentication requires extracting tokens from your browser.
-
-#### Option A: Using dompower CLI (Recommended)
-
-1. Install the dompower library:
-   ```bash
-   pip install dompower
-   ```
-
-2. Run the auth helper:
-   ```bash
-   dompower auth-helper --open-browser
-   ```
-
-3. Follow the on-screen instructions to:
-   - Log in to your Dominion Energy account
-   - Extract tokens from browser DevTools
-   - Enter them in the CLI
-
-#### Option B: Manual Token Extraction
-
-1. Go to https://login.dominionenergy.com/CommonLogin?SelectedAppName=Electric
-2. Log in with your Dominion Energy credentials
-3. Open browser DevTools (F12)
-4. Go to the Network tab
-5. Look for requests to `prodsvc-dominioncip.smartcmobile.com`
-6. Find the `Authorization` header (starts with `Bearer `)
-7. Extract the access token (part after "Bearer ")
-8. Look in the response or Local Storage for the refresh token
-
-### Step 2: Add Integration
+### Add Integration
 
 1. Go to Home Assistant Settings > Devices & Services
 2. Click "Add Integration"
 3. Search for "Dominion Energy"
-4. Enter your:
-   - Access Token
-   - Refresh Token
-   - Account Number (from your bill)
-   - Meter Number (from your bill)
+4. Enter your Dominion Energy username (email) and password
+5. Complete the two-factor authentication (TFA) when prompted
+6. Select your account and meter if you have multiple
 
-### Step 3: Configure Cost Calculation (Optional)
+> **Note**: SMS-based TFA is recommended. Email TFA may have reliability issues.
+
+### Configure Cost Calculation (Optional)
 
 1. After setup, click "Configure" on the integration
 2. Choose your cost calculation method:
@@ -126,13 +94,13 @@ The Energy Dashboard works best with cumulative statistics that track total cons
 
 > **Tip**: The statistic ID format is `dominion_energy:{account_number}_energy_consumption`. You can find your account number in the integration's device info or on your Dominion Energy bill.
 
-## Token Expiration
+## Authentication
 
-Tokens automatically refresh every 30 minutes. If authentication fails:
+Tokens automatically refresh in the background. If authentication fails:
 
 1. Home Assistant will show a notification to re-authenticate
-2. Run `dompower auth-helper` to get fresh tokens
-3. Enter the new tokens in the re-authentication flow
+2. Click the notification to start the re-authentication flow
+3. Enter your username/password and complete TFA again
 
 ## Troubleshooting
 
@@ -140,9 +108,9 @@ Tokens automatically refresh every 30 minutes. If authentication fails:
 - Check your internet connection
 - Verify Dominion Energy services are online
 
-### "Invalid tokens"
+### "Invalid authentication"
 - Tokens may have expired after extended inactivity
-- Run `dompower auth-helper` to get fresh tokens
+- Use the re-authentication flow to log in again
 
 ### Missing data
 - Data may take up to 30 minutes to appear after setup
