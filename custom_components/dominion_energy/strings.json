@@ -118,40 +118,40 @@
   "entity": {
     "sensor": {
       "latest_interval_usage": {
-        "name": "Latest Interval Usage"
+        "name": "Latest interval usage"
       },
       "daily_usage": {
-        "name": "Daily Usage"
+        "name": "Today's usage"
       },
       "monthly_usage": {
-        "name": "Monthly Usage"
+        "name": "Current month usage"
       },
       "daily_cost": {
-        "name": "Daily Cost"
+        "name": "Today's cost"
       },
       "monthly_cost": {
-        "name": "Monthly Cost"
+        "name": "Current month cost"
       },
       "last_bill_charges": {
-        "name": "Last Bill Charges"
+        "name": "Last bill charges"
       },
       "last_bill_usage": {
-        "name": "Last Bill Usage"
+        "name": "Last bill usage"
       },
       "current_period_usage": {
-        "name": "Current Period Usage"
+        "name": "Current billing period usage"
       },
       "effective_rate": {
-        "name": "Effective Rate"
+        "name": "Effective rate"
       },
       "billing_period_start": {
-        "name": "Billing Period Start"
+        "name": "Billing period start"
       },
       "billing_period_end": {
-        "name": "Billing Period End"
+        "name": "Billing period end"
       },
       "is_time_of_use": {
-        "name": "Time-of-Use Plan"
+        "name": "Time-of-use plan"
       }
     }
   }

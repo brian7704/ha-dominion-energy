@@ -41,6 +41,7 @@ SENSORS: tuple[DominionEnergySensorDescription, ...] = (
     DominionEnergySensorDescription(
         key="latest_interval_usage",
         translation_key="latest_interval_usage",
+        name="Latest interval usage",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.MEASUREMENT,
@@ -50,6 +51,7 @@ SENSORS: tuple[DominionEnergySensorDescription, ...] = (
     DominionEnergySensorDescription(
         key="daily_usage",
         translation_key="daily_usage",
+        name="Today's usage",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -59,6 +61,7 @@ SENSORS: tuple[DominionEnergySensorDescription, ...] = (
     DominionEnergySensorDescription(
         key="monthly_usage",
         translation_key="monthly_usage",
+        name="Current month usage",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -68,6 +71,7 @@ SENSORS: tuple[DominionEnergySensorDescription, ...] = (
     DominionEnergySensorDescription(
         key="daily_cost",
         translation_key="daily_cost",
+        name="Today's cost",
         native_unit_of_measurement="USD",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -77,6 +81,7 @@ SENSORS: tuple[DominionEnergySensorDescription, ...] = (
     DominionEnergySensorDescription(
         key="monthly_cost",
         translation_key="monthly_cost",
+        name="Current month cost",
         native_unit_of_measurement="USD",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -87,6 +92,7 @@ SENSORS: tuple[DominionEnergySensorDescription, ...] = (
     DominionEnergySensorDescription(
         key="last_bill_charges",
         translation_key="last_bill_charges",
+        name="Last bill charges",
         native_unit_of_measurement="USD",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.TOTAL,
@@ -98,6 +104,7 @@ SENSORS: tuple[DominionEnergySensorDescription, ...] = (
     DominionEnergySensorDescription(
         key="last_bill_usage",
         translation_key="last_bill_usage",
+        name="Last bill usage",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
@@ -109,6 +116,7 @@ SENSORS: tuple[DominionEnergySensorDescription, ...] = (
     DominionEnergySensorDescription(
         key="current_period_usage",
         translation_key="current_period_usage",
+        name="Current billing period usage",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -120,6 +128,7 @@ SENSORS: tuple[DominionEnergySensorDescription, ...] = (
     DominionEnergySensorDescription(
         key="effective_rate",
         translation_key="effective_rate",
+        name="Effective rate",
         native_unit_of_measurement="USD/kWh",
         device_class=None,  # No standard device class for rates
         state_class=SensorStateClass.MEASUREMENT,
@@ -132,6 +141,7 @@ SENSORS: tuple[DominionEnergySensorDescription, ...] = (
     DominionEnergySensorDescription(
         key="billing_period_start",
         translation_key="billing_period_start",
+        name="Billing period start",
         device_class=SensorDeviceClass.DATE,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data: (
@@ -141,6 +151,7 @@ SENSORS: tuple[DominionEnergySensorDescription, ...] = (
     DominionEnergySensorDescription(
         key="billing_period_end",
         translation_key="billing_period_end",
+        name="Billing period end",
         device_class=SensorDeviceClass.DATE,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data: (
@@ -150,6 +161,7 @@ SENSORS: tuple[DominionEnergySensorDescription, ...] = (
     DominionEnergySensorDescription(
         key="is_time_of_use",
         translation_key="is_time_of_use",
+        name="Time-of-use plan",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data: (
             "Yes" if data.bill_forecast and data.bill_forecast.is_tou else "No"
