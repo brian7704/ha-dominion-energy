@@ -186,7 +186,7 @@ async def async_setup_entry(
         name=f"Dominion Energy {account_number}",
         manufacturer="Dominion Energy",
         entry_type=DeviceEntryType.SERVICE,
-        configuration_url="https://mya.dominionenergy.com",
+        configuration_url="https://myaccount.dominionenergy.com",
     )
 
     # Add service address as model if available

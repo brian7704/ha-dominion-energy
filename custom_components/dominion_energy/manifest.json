@@ -7,6 +7,6 @@
   "documentation": "https://github.com/your-repo/ha-dominion-energy",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/your-repo/ha-dominion-energy/issues",
-  "requirements": ["dompower==0.1.0"],
-  "version": "1.1.2"
+  "requirements": ["dompower==0.1.1"],
+  "version": "1.1.3"
 }
