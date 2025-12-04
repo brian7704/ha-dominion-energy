@@ -128,8 +128,8 @@ This is a public client identifier embedded in the Dominion Energy web app. It c
 
 ## Support
 
-- [Report Issues](https://github.com/YeomansII/ha-dominion-energy/issues)
-- [dompower Library](https://github.com/YeomansII/dompower)
+- [Report Issues](https://github.com/YeomansIII/ha-dominion-energy/issues)
+- [dompower Library](https://github.com/YeomansIII/dompower)
 
 ## License
 
