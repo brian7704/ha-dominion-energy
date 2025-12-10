@@ -7,13 +7,16 @@ from datetime import date, datetime, timedelta
 import logging
 
 from dompower import (
-    BillForecast,
-    DompowerClient,
-    IntervalUsageData,
-    TokenExpiredError,
-    InvalidAuthError,
-    CannotConnectError,
     ApiError,
+    BillForecast,
+    CannotConnectError,
+    DompowerClient,
+    GigyaAuthenticator,
+    IntervalUsageData,
+    InvalidAuthError,
+    InvalidCredentialsError,
+    TFARequiredError,
+    TokenExpiredError,
 )
 
 from homeassistant.components.recorder import get_instance
@@ -45,10 +48,12 @@ from .const import (
     CONF_FIXED_RATE,
     CONF_METER_NUMBER,
     CONF_OFF_PEAK_RATE,
+    CONF_PASSWORD,
     CONF_PEAK_END_HOUR,
     CONF_PEAK_RATE,
     CONF_PEAK_START_HOUR,
     CONF_REFRESH_TOKEN,
+    CONF_USERNAME,
     COST_MODE_API,
     COST_MODE_TOU,
     DEFAULT_FIXED_RATE,
@@ -127,6 +132,61 @@ class DominionEnergyCoordinator(DataUpdateCoordinator[DominionEnergyData]):
             refresh_token=self.config_entry.data[CONF_REFRESH_TOKEN],
             token_update_callback=self._token_update_callback,
         )
+
+    async def _async_attempt_reauth(self) -> bool:
+        """Attempt to re-authenticate using stored credentials.
+
+        Returns True if successful, False if manual reauth needed.
+        """
+        username = self.config_entry.data.get(CONF_USERNAME)
+        password = self.config_entry.data.get(CONF_PASSWORD)
+
+        if not username or not password:
+            _LOGGER.warning("No stored credentials for auto-reauth")
+            return False
+
+        _LOGGER.info("Attempting automatic re-authentication for %s", username)
+        session = async_get_clientsession(self.hass)
+
+        try:
+            # Use GigyaAuthenticator.async_login() without TFA callback
+            # This will raise TFARequiredError if TFA is needed
+            auth = GigyaAuthenticator(session)
+            tokens = await auth.async_login(username, password, tfa_code_callback=None)
+
+            # Update stored tokens in config entry
+            new_data = {
+                **self.config_entry.data,
+                CONF_ACCESS_TOKEN: tokens.access_token,
+                CONF_REFRESH_TOKEN: tokens.refresh_token,
+            }
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=new_data
+            )
+
+            # Reinitialize client with new tokens
+            self._client = DompowerClient(
+                session,
+                access_token=tokens.access_token,
+                refresh_token=tokens.refresh_token,
+                token_update_callback=self._token_update_callback,
+            )
+
+            _LOGGER.info("Successfully re-authenticated with stored credentials")
+            return True
+
+        except TFARequiredError:
+            _LOGGER.info("TFA required during reauth - manual intervention needed")
+            return False
+        except InvalidCredentialsError as err:
+            _LOGGER.warning("Auto-reauth failed - credentials invalid: %s", err)
+            return False
+        except CannotConnectError as err:
+            _LOGGER.warning("Auto-reauth failed - connection error: %s", err)
+            return False
+        except Exception as err:
+            _LOGGER.warning("Auto-reauth failed unexpectedly: %s", err)
+            return False
 
     async def _async_update_data(self) -> DominionEnergyData:
         """Fetch data from the API.
@@ -210,7 +270,15 @@ class DominionEnergyCoordinator(DataUpdateCoordinator[DominionEnergyData]):
                 month_end_date=yesterday,
             )
 
-        except (TokenExpiredError, InvalidAuthError) as err:
+        except TokenExpiredError as err:
+            _LOGGER.info("Refresh token expired, attempting auto-reauth")
+            if await self._async_attempt_reauth():
+                # Retry the update with new tokens
+                return await self._async_update_data()
+            raise ConfigEntryAuthFailed(
+                "Authentication failed - please re-authenticate"
+            ) from err
+        except InvalidAuthError as err:
             raise ConfigEntryAuthFailed(
                 "Authentication failed - please re-authenticate"
             ) from err
@@ -383,22 +451,36 @@ class DominionEnergyCoordinator(DataUpdateCoordinator[DominionEnergyData]):
         last_stat_start = last_stat_data["start"]
         current_sum = float(last_stat_data.get("sum", 0))
 
-        # Convert to date for comparison
+        # Convert to datetime for comparison
         if isinstance(last_stat_start, (int, float)):
             last_stat_dt = datetime.fromtimestamp(last_stat_start, tz=dt_util.UTC)
         else:
             last_stat_dt = last_stat_start
 
-        last_stat_date = last_stat_dt.date()
+        # Convert to local timezone for date comparison since data_date is local
+        # (The timestamps are stored as UTC but actually represent local times
+        # due to how the dompower library parses them)
+        local_tz = dt_util.get_default_time_zone()
+        last_stat_local = last_stat_dt.astimezone(local_tz)
+        last_stat_date = last_stat_local.date()
 
         # Check if we need to fetch new data
         if last_stat_date >= data_date:
-            _LOGGER.debug("Statistics already up to date for %s", data_date)
+            _LOGGER.info(
+                "Statistics already up to date: last_stat_date=%s >= data_date=%s",
+                last_stat_date,
+                data_date,
+            )
             return
 
         # Fetch data from day after last stat to data_date
         start_date = last_stat_date + timedelta(days=1)
-        _LOGGER.debug("Updating statistics from %s to %s", start_date, data_date)
+        _LOGGER.info(
+            "Fetching statistics update from %s to %s (current_sum=%.3f)",
+            start_date,
+            data_date,
+            current_sum,
+        )
 
         try:
             intervals = await self._client.async_get_interval_usage(
@@ -448,7 +530,10 @@ class DominionEnergyCoordinator(DataUpdateCoordinator[DominionEnergyData]):
             unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         )
 
-        _LOGGER.debug(
-            "Adding %d new statistics for %s", len(consumption_statistics), stat_id
+        _LOGGER.info(
+            "Adding %d new hourly statistics for %s (sum=%.3f)",
+            len(consumption_statistics),
+            stat_id,
+            current_sum,
         )
         async_add_external_statistics(self.hass, metadata, consumption_statistics)
