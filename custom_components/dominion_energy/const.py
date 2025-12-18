@@ -31,7 +31,7 @@ COST_MODE_API: Final = "api_estimate"
 UPDATE_INTERVAL_MINUTES: Final = 30
 
 # Historical data backfill on first setup
-BACKFILL_DAYS: Final = 7
+BACKFILL_DAYS: Final = 365
 
 # Default cost values
 DEFAULT_FIXED_RATE: Final = 0.12  # $/kWh
